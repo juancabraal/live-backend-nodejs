@@ -1,0 +1,133 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless Express Application/API powered by API Gateway and Lambda
+Parameters:
+  DbHost:
+    Type: String
+  DbDatabase:
+    Type: String
+  DbUser:
+    Type: String
+  DbPassword:
+    Type: String
+  DbPort:
+    Type: String
+  SecurityGroup:
+    Type: String
+  SubnetA:
+    Type: String
+  SubnetB:
+    Type: String
+  SubnetC:
+    Type: String
+  NodeEnv:
+    Type: String
+    Default: development
+  DynamoDB:
+    Type: String
+  DynamoDBBackOffice:
+    Type: String
+Resources:
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Tags:
+        app: somalive-backend
+        projeto: somalive
+      AccessLogSettings:
+        DestinationArn: !GetAtt AccessLogs.Arn
+        Format: $context.requestId
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+          - PATCH
+      StageVariables:
+        StageVar: Value
+      FailOnWarnings: True
+
+  AccessLogs:
+    Type: AWS::Logs::LogGroup
+
+  LambdaApiGatewayExecutionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt SomaLiveBackendFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join
+        - ""
+        - - "arn:aws:execute-api:"
+          - !Ref AWS::Region
+          - ":"
+          - !Ref AWS::AccountId
+          - ":"
+          - !Ref HttpApi
+          - "/*/*"
+
+  SomaLiveBackendFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: lambda.handler
+      MemorySize: 1024
+      Runtime: nodejs12.x
+      Timeout: 30
+      Events:
+        ExplicitApi: # warning: creates a public endpoint
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: ANY
+            Path: /{proxy+}
+            TimeoutInMillis: 15000
+            PayloadFormatVersion: "1.0"
+            RouteSettings:
+              ThrottlingBurstLimit: 600
+      Environment:
+        Variables:
+          MYSQL_HOST: !Ref DbHost
+          MYSQL_USER: !Ref DbUser
+          MYSQL_PASS: !Ref DbPassword
+          MYSQL_SCHEMA: !Ref DbDatabase
+          MYSQL_BASE: !Ref DbDatabase
+          MYSQL_PORT: !Ref DbPort
+          NODE_ENV: !Ref NodeEnv
+          DYNAMODB_TABLENAME: !Ref DynamoDB
+          DYNAMODB_BACKOFFICE_TABLENAME: !Ref DynamoDBBackOffice
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref SecurityGroup
+        SubnetIds:
+          - !Ref SubnetA
+          - !Ref SubnetB
+          - !Ref SubnetC
+      Tags:
+        app: somalive-backend
+        projeto: somalive
+
+Outputs:
+  LambdaFunctionConsoleUrl:
+    Description: Console URL for the Lambda Function.
+    Value: !Join
+      - ""
+      - - https://
+        - !Ref AWS::Region
+        - ".console.aws.amazon.com/lambda/home?region="
+        - !Ref AWS::Region
+        - "#/functions/"
+        - !Ref SomaLiveBackendFunction
+  HttpApiUrl:
+    Description: URL of your API endpoint
+    Value:
+      Fn::Sub: "****"
+  HttpApiId:
+    Description: Api id of HttpApi
+    Value:
+      Ref: HttpApi

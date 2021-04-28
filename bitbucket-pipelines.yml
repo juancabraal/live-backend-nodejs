@@ -1,0 +1,88 @@
+#  Template AWS Cloudformation deploy
+
+#  This template allows you to deploy your configuration as code using AWS CloudFormation.
+#  The workflow allows validate, linting and security scans on feature branches (as well as master).
+#  The AWS cloudformation template will be validated and deployed after the code is merged to master.
+
+# Prerequisites: $AWS_ACCESS_KEY_ID, $AWS_SECRET_ACCESS_KEY, $AWS_DEFAULT_REGION setup in the Repository variables and Deployment variables.
+# For advanced cases, please, follow examples from the pipe's README https://bitbucket.org/atlassian/aws-cloudformation-deploy/src/master/README.md
+# You can find AWS Cloudformation template example for creating AWS S3 Bucket in the template.yaml file.
+# You can modify and use it to deploy any of your configuration as code. https://aws.amazon.com/cloudformation/resources/templates/
+
+image: node:14.13.1-alpine3.12
+
+# Workflow Configuration
+
+pipelines:
+  default:
+    - parallel:
+        - step:
+            name: 'Build and Test'
+            script:
+              - echo 'build inicial do projeto, importando dependencias, etc.'
+        - step:
+            name: 'Lint'
+            script:
+              - echo 'linting após o build inicial'
+        - step:
+            name: 'Security scan'
+            script:
+              - echo 'Scan de segurança e padrões de qualidade com SonarQube, etc..'
+  branches:
+    develop:
+      - parallel:
+          - step:
+              name: 'Build dependencies'
+              caches:
+                - node
+              script:
+                - yarn install --production
+              artifacts:
+                - node_modules/**
+          - step:
+              name: Validate with AWS
+              image: amazon/aws-cli:2.0.48
+              script:
+                - aws cloudformation validate-template --template-body file://cloudformation.yaml
+          - step:
+              name: Security Scan
+              script:
+                # Run a security scan for sensitive data.
+                # See more security tools at https://bitbucket.org/product/features/pipelines/integrations?&category=security
+                - pipe: atlassian/git-secrets-scan:0.4.3
+      - step:
+          name: 'Deploy Test'
+          image: amazon/aws-cli:2.0.48
+          deployment: Test
+          script:
+            - aws cloudformation package --template ./cloudformation.yaml --s3-bucket somalive-backend-deployment-artifacts --output-template ./packaged-sam.yaml --region us-east-1
+            - aws cloudformation deploy --template-file ./packaged-sam.yaml --stack-name SomaLive-Develop-BackendStack --parameter-overrides DynamoDB=$DYNAMODB_TABLENAME DynamoDBBackOffice=$DYNAMODB_BACKOFFICE_TABLENAME DbHost=$MYSQL_HOST DbDatabase=$MYSQL_BASE DbUser=$MYSQL_USER DbPassword=$MYSQL_PASS DbPort=$MYSQL_PORT SecurityGroup=$AWS_SECURITY_GROUP SubnetA=$AWS_SUBNET_A SubnetB=$AWS_SUBNET_B SubnetC=$AWS_SUBNET_C NodeEnv=production --capabilities CAPABILITY_IAM --region us-east-1
+
+    master:
+      - parallel:
+          - step:
+              name: 'Build dependencies'
+              caches:
+                - node
+              script:
+                - yarn install --production
+              artifacts:
+                - node_modules/**
+          - step:
+              name: Validate with AWS
+              image: amazon/aws-cli:2.0.48
+              script:
+                - aws cloudformation validate-template --template-body file://cloudformation.yaml
+          - step:
+              name: Security Scan
+              script:
+                # Run a security scan for sensitive data.
+                # See more security tools at https://bitbucket.org/product/features/pipelines/integrations?&category=security
+                - pipe: atlassian/git-secrets-scan:0.4.3
+      - step:
+          name: 'Deploy Production'
+          image: amazon/aws-cli:2.0.48
+          deployment: Production
+          script:
+            - aws cloudformation package --template ./cloudformation.yaml --s3-bucket somalive-backend-deployment-artifacts --output-template ./packaged-sam.yaml --region us-east-1
+            - aws cloudformation deploy --template-file ./packaged-sam.yaml --stack-name SomaLive-Production-BackendStack --parameter-overrides DynamoDB=$DYNAMODB_TABLENAME DynamoDBBackOffice=$DYNAMODB_BACKOFFICE_TABLENAME DbHost=$MYSQL_HOST DbDatabase=$MYSQL_BASE DbUser=$MYSQL_USER DbPassword=$MYSQL_PASS DbPort=$MYSQL_PORT SecurityGroup=$AWS_SECURITY_GROUP SubnetA=$AWS_SUBNET_A SubnetB=$AWS_SUBNET_B SubnetC=$AWS_SUBNET_C NodeEnv=production --capabilities CAPABILITY_IAM --region us-east-1

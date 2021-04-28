@@ -1,0 +1,40 @@
+runtime: custom
+env: flex
+
+service: api-somalive
+
+network:
+  name: default
+  subnetwork_name: default
+
+beta_settings:
+  cloud_sql_instances: apt-bonbon-179602:us-east1:homolog
+
+# beta_settings:
+#     cloud_sql_instances: apt-bonbon-179602:us-central1:datalake-plm
+
+readiness_check:
+  path: "/readiness_check"
+  check_interval_sec: 5
+  timeout_sec: 4
+  failure_threshold: 2
+  success_threshold: 2
+  app_start_timeout_sec: 300
+
+liveness_check:
+  path: "/liveness_check"
+  check_interval_sec: 30
+  timeout_sec: 4
+  failure_threshold: 2
+  success_threshold: 2
+
+automatic_scaling:
+  min_num_instances: 1
+  max_num_instances: 3
+
+env_variables:
+  MYSQL_SOCKET: "****"
+  MYSQL_USER: "****"
+  MYSQL_PASS: "****"
+  MYSQL_SCHEMA: "****"
+  NODE_ENV: "production"
